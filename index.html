@@ -1,0 +1,948 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BootAnimationPreviewer</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <style>
+        :root {
+            --bg-color: #0b0f19;
+            --panel-bg: rgba(22, 30, 46, 0.6);
+            --panel-border: rgba(255, 255, 255, 0.1);
+            --text-main: #f1f5f9;
+            --text-muted: #94a3b8;
+            --accent: #3b82f6;
+            --accent-hover: #60a5fa;
+            --danger: #ef4444;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --font-family: system-ui, -apple-system, sans-serif;
+            --radius: 12px;
+            --transition: all 0.2s ease;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: var(--font-family);
+            background: linear-gradient(135deg, var(--bg-color) 0%, #111827 100%);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+        }
+
+        header {
+            padding: 1.5rem 2rem;
+            border-bottom: 1px solid var(--panel-border);
+            background: rgba(11, 15, 25, 0.8);
+            backdrop-filter: blur(12px);
+            z-index: 10;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        header h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            letter-spacing: -0.5px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .lang-switcher select {
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text-main);
+            border: 1px solid var(--panel-border);
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            outline: none;
+            font-family: inherit;
+            cursor: pointer;
+            transition: var(--transition);
+        }
+
+        .lang-switcher select:hover {
+            border-color: var(--text-muted);
+        }
+
+        .lang-switcher select option {
+            background: var(--bg-color);
+            color: var(--text-main);
+        }
+
+        .main-container {
+            display: grid;
+            grid-template-columns: 350px 1fr;
+            gap: 2rem;
+            padding: 2rem;
+            flex: 1;
+        }
+
+        @media (max-width: 1024px) {
+            .main-container { grid-template-columns: 1fr; }
+        }
+
+        .glass-panel {
+            background: var(--panel-bg);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--panel-border);
+            border-radius: var(--radius);
+            padding: 1.5rem;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .section-title {
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-muted);
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+        }
+
+        .drop-zone {
+            border: 2px dashed var(--panel-border);
+            border-radius: var(--radius);
+            padding: 2rem 1rem;
+            text-align: center;
+            cursor: pointer;
+            transition: var(--transition);
+            background: rgba(255,255,255,0.02);
+        }
+        .drop-zone:hover, .drop-zone.drag-over {
+            border-color: var(--accent);
+            background: rgba(59, 130, 246, 0.1);
+        }
+        .drop-zone input { display: none; }
+        .drop-zone svg { width: 40px; fill: var(--text-muted); margin-bottom: 10px; }
+        .file-info { font-size: 0.85rem; color: var(--text-muted); margin-top: 5px; }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+        .stat-box {
+            background: rgba(0,0,0,0.2);
+            padding: 0.75rem;
+            border-radius: 8px;
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+        .stat-label { font-size: 0.75rem; color: var(--text-muted); }
+        .stat-value { font-size: 1.1rem; font-weight: 600; margin-top: 2px; }
+
+        .file-explorer {
+            flex: 1;
+            overflow-y: auto;
+            max-height: 250px;
+            background: rgba(0,0,0,0.2);
+            border-radius: 8px;
+            padding: 0.5rem;
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+        .file-explorer ul { list-style: none; font-size: 0.85rem; }
+        .file-explorer li {
+            padding: 0.4rem 0.5rem;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            display: flex;
+            justify-content: space-between;
+        }
+        .file-explorer li:last-child { border: none; }
+
+        .diagnostics-panel {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--panel-border);
+            border-radius: 8px;
+            padding: 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+        .diagnostics-panel ul {
+            list-style-type: disc;
+            padding-left: 1.2rem;
+            font-size: 0.85rem;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .diag-warning { color: var(--warning); }
+        .diag-success { color: var(--success); list-style-type: none; padding-left: 0; margin-left: -1.2rem;}
+
+        .preview-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+        .phone-frame {
+            border: 12px solid #1f2937;
+            border-radius: 36px;
+            box-shadow: inset 0 0 0 4px #000, 0 20px 50px rgba(0,0,0,0.5);
+            background: #000;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: var(--transition);
+            width: 100%;
+            max-width: 400px;
+            aspect-ratio: 9/16;
+        }
+        .phone-notch {
+            position: absolute;
+            top: 0;
+            width: 120px;
+            height: 25px;
+            background: #000;
+            border-bottom-left-radius: 12px;
+            border-bottom-right-radius: 12px;
+            z-index: 2;
+        }
+        canvas {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+            background: #000;
+        }
+        .phone-frame.fullscreen {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            max-width: none; border: none; border-radius: 0; aspect-ratio: auto; z-index: 100;
+        }
+        .phone-frame.fullscreen .phone-notch { display: none; }
+
+        .controls-wrapper {
+            width: 100%;
+            max-width: 500px;
+            margin-top: 1.5rem;
+        }
+        .timeline {
+            width: 100%;
+            margin-bottom: 1rem;
+            appearance: none;
+            height: 6px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 3px;
+            outline: none;
+            cursor: pointer;
+        }
+        .timeline::-webkit-slider-thumb {
+            appearance: none; width: 16px; height: 16px;
+            border-radius: 50%; background: var(--accent); cursor: pointer;
+            box-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
+        }
+        .btn-group {
+            display: flex;
+            justify-content: center;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+        }
+        button {
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.1);
+            color: var(--text-main);
+            padding: 0.6rem 1rem;
+            border-radius: 8px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 0.9rem;
+            transition: var(--transition);
+        }
+        button:hover:not(:disabled) { background: rgba(255,255,255,0.2); border-color: var(--text-muted); }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        button.primary { background: var(--accent); border-color: var(--accent); }
+        button.primary:hover:not(:disabled) { background: var(--accent-hover); }
+        button svg { width: 16px; height: 16px; fill: currentColor; }
+
+        .loader-overlay {
+            position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.8); display: flex; flex-direction: column;
+            align-items: center; justify-content: center; z-index: 5;
+            opacity: 0; pointer-events: none; transition: opacity 0.3s;
+        }
+        .loader-overlay.active { opacity: 1; pointer-events: all; }
+        .spinner {
+            width: 40px; height: 40px; border: 4px solid rgba(255,255,255,0.1);
+            border-top-color: var(--accent); border-radius: 50%;
+            animation: spin 1s linear infinite; margin-bottom: 1rem;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        
+        .toast-container { position: fixed; bottom: 20px; right: 20px; z-index: 1000; }
+        .toast {
+            background: var(--panel-bg); backdrop-filter: blur(10px);
+            border-left: 4px solid var(--accent); padding: 1rem;
+            margin-top: 10px; border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            animation: slideIn 0.3s forwards; color: #fff; min-width: 250px;
+        }
+        .toast.error { border-color: var(--danger); }
+        .toast.success { border-color: var(--success); }
+        .toast.warning { border-color: var(--warning); }
+        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        @keyframes slideOut { to { transform: translateX(100%); opacity: 0; } }
+
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+<header>
+    <h1>
+        <svg viewBox="0 0 24 24" width="24" height="24" fill="var(--accent)"><path d="M17,1H7A2,2 0 0,0 5,3V21A2,2 0 0,0 7,23H17A2,2 0 0,0 19,21V3A2,2 0 0,0 17,1M17,19H7V5H17V19M16,13H13V8H11V13H8L12,17L16,13Z"/></svg>
+        BootAnimationPreviewer
+    </h1>
+    <div class="lang-switcher">
+        <select id="lang-select">
+            <option value="en">English</option>
+            <option value="tr">Türkçe</option>
+        </select>
+    </div>
+</header>
+
+<div class="main-container">
+    <div class="glass-panel">
+        <h2 class="section-title" data-i18n="title_source">Source File</h2>
+        <div class="drop-zone" id="drop-zone">
+            <svg viewBox="0 0 24 24"><path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M13.5,16V19H10.5V16H8L12,12L16,16H13.5M13,9V3.5L18.5,9H13Z"/></svg>
+            <p data-i18n="drag_drop">Drag & Drop bootanimation.zip</p>
+            <p class="file-info" data-i18n="click_browse">or click to browse</p>
+            <input type="file" id="file-input" accept=".zip">
+        </div>
+
+        <h2 class="section-title" style="margin-top: 1rem;" data-i18n="title_meta">Animation Metadata</h2>
+        <div class="stats-grid">
+            <div class="stat-box">
+                <div class="stat-label" data-i18n="lbl_res">Resolution</div>
+                <div class="stat-value" id="stat-res">-- x --</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label" data-i18n="lbl_fps">Target FPS</div>
+                <div class="stat-value" id="stat-fps">--</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label" data-i18n="lbl_frames">Total Frames</div>
+                <div class="stat-value" id="stat-frames">0</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label" data-i18n="lbl_size">File Size</div>
+                <div class="stat-value" id="stat-size">0 MB</div>
+            </div>
+        </div>
+
+        <h2 class="section-title" style="margin-top: 1rem;" data-i18n="title_parts">Animation Parts</h2>
+        <div class="file-explorer">
+            <ul id="parts-list">
+                <li style="color: var(--text-muted)" id="awaiting-text" data-i18n="awaiting_upload">Awaiting file upload...</li>
+            </ul>
+        </div>
+
+        <div id="diagnostics-container" class="hidden">
+            <h2 class="section-title" style="margin-top: 1rem;" data-i18n="title_diag">Diagnostics</h2>
+            <div class="diagnostics-panel">
+                <ul id="diagnostics-list"></ul>
+            </div>
+        </div>
+    </div>
+
+    <div class="preview-container">
+        <div class="phone-frame" id="phone-frame">
+            <div class="phone-notch"></div>
+            <canvas id="preview-canvas" width="400" height="800"></canvas>
+            
+            <div class="loader-overlay" id="loader">
+                <div class="spinner"></div>
+                <div id="loader-text" data-i18n="extracting">Extracting Archive...</div>
+            </div>
+        </div>
+
+        <div class="controls-wrapper glass-panel">
+            <div style="display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--text-muted); margin-bottom: 5px;">
+                <span id="current-part-text"><span data-i18n="lbl_part">Part</span>: --</span>
+                <span id="current-frame-text"><span data-i18n="lbl_frame">Frame</span>: 0 / 0</span>
+            </div>
+            <input type="range" class="timeline" id="timeline" min="0" max="100" value="0" disabled>
+            
+            <div class="btn-group">
+                <button id="btn-start" data-i18n-title="btn_start" disabled>
+                    <svg viewBox="0 0 24 24"><path d="M11.5,12L20,18V6M4,6V18H6V6"/></svg>
+                </button>
+                <button id="btn-prev" data-i18n-title="btn_prev" disabled>
+                    <svg viewBox="0 0 24 24"><path d="M6,18V6H8V18M9.5,12L18,6V18"/></svg>
+                </button>
+                <button id="btn-play" class="primary" data-i18n-title="btn_play" disabled>
+                    <svg id="icon-play" viewBox="0 0 24 24"><path d="M8,5.14V19.14L19,12.14L8,5.14Z"/></svg>
+                    <svg id="icon-pause" class="hidden" viewBox="0 0 24 24"><path d="M14,19H18V5H14M6,19H10V5H6V19Z"/></svg>
+                </button>
+                <button id="btn-stop" data-i18n-title="btn_stop" disabled>
+                    <svg viewBox="0 0 24 24"><path d="M18,18H6V6H18V18Z"/></svg>
+                </button>
+                <button id="btn-next" data-i18n-title="btn_next" disabled>
+                    <svg viewBox="0 0 24 24"><path d="M16,18V6H18V18M14.5,12L6,18V6"/></svg>
+                </button>
+                <button id="btn-fullscreen" data-i18n-title="btn_full">
+                    <svg viewBox="0 0 24 24"><path d="M5,5H10V7H7V10H5V5M14,5H19V10H17V7H14V5M17,14H19V19H14V17H17V14M10,17V19H5V14H7V17H10Z"/></svg>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="toast-container" id="toast-container"></div>
+
+<script>
+const translations = {
+    en: {
+        title_source: "Source File",
+        drag_drop: "Drag & Drop bootanimation.zip",
+        click_browse: "or click to browse",
+        title_meta: "Animation Metadata",
+        lbl_res: "Resolution",
+        lbl_fps: "Target FPS",
+        lbl_frames: "Total Frames",
+        lbl_size: "File Size",
+        title_parts: "Animation Parts",
+        awaiting_upload: "Awaiting file upload...",
+        title_diag: "Diagnostics",
+        extracting: "Extracting Archive...",
+        btn_start: "Jump to Start",
+        btn_prev: "Previous Frame",
+        btn_play: "Play / Pause (Space)",
+        btn_stop: "Stop",
+        btn_next: "Next Frame",
+        btn_full: "Fullscreen",
+        lbl_part: "Part",
+        lbl_frame: "Frame",
+        err_zip: "Please upload a valid .zip file",
+        msg_reading: "Reading ZIP archive...",
+        err_desc_missing: "desc.txt is missing from the archive.",
+        err_desc_format: "desc.txt is improperly formatted.",
+        err_desc_invalid: "Invalid resolution or FPS in desc.txt.",
+        warn_fps: "Unusual FPS value detected ({0}). Standard is 15-60.",
+        msg_success: "Animation loaded successfully",
+        warn_newline: "desc.txt does not end with a new line. Android might skip the last part.",
+        warn_folder: "Folder for part '{0}' is missing or empty.",
+        warn_res: "Image resolution ({0}) mismatch with desc.txt ({1}).",
+        err_no_frames: "No valid PNG/JPG frames found in defined parts.",
+        msg_extracting: "Extracting {0}...",
+        msg_diag_success: "No errors or warnings found. Animation is perfect!",
+        msg_diag_warn: "{0} warning(s) found. Check Diagnostics panel.",
+        lbl_frames_text: "frames"
+    },
+    tr: {
+        title_source: "Kaynak Dosya",
+        drag_drop: "bootanimation.zip'i Sürükle ve Bırak",
+        click_browse: "veya seçmek için tıklayın",
+        title_meta: "Animasyon Meta Verisi",
+        lbl_res: "Çözünürlük",
+        lbl_fps: "Hedef FPS",
+        lbl_frames: "Toplam Kare",
+        lbl_size: "Dosya Boyutu",
+        title_parts: "Animasyon Parçaları",
+        awaiting_upload: "Dosya yüklenmesi bekleniyor...",
+        title_diag: "Teşhis",
+        extracting: "Arşiv Çıkartılıyor...",
+        btn_start: "Başa Dön",
+        btn_prev: "Önceki Kare",
+        btn_play: "Oynat / Duraklat (Boşluk)",
+        btn_stop: "Durdur",
+        btn_next: "Sonraki Kare",
+        btn_full: "Tam Ekran",
+        lbl_part: "Bölüm",
+        lbl_frame: "Kare",
+        err_zip: "Lütfen geçerli bir .zip dosyası yükleyin",
+        msg_reading: "ZIP arşivi okunuyor...",
+        err_desc_missing: "desc.txt arşivde bulunamadı.",
+        err_desc_format: "desc.txt formatı hatalı.",
+        err_desc_invalid: "desc.txt içindeki çözünürlük veya FPS geçersiz.",
+        warn_fps: "Alışılmadık FPS değeri tespit edildi ({0}). Standart 15-60'tır.",
+        msg_success: "Animasyon başarıyla yüklendi",
+        warn_newline: "desc.txt yeni satır ile bitmiyor. Android son kısmı atlayabilir.",
+        warn_folder: "'{0}' bölümü için klasör eksik veya boş.",
+        warn_res: "Görüntü çözünürlüğü ({0}) desc.txt ({1}) ile uyuşmuyor.",
+        err_no_frames: "Tanımlanan bölümlerde geçerli PNG/JPG karesi bulunamadı.",
+        msg_extracting: "{0} çıkartılıyor...",
+        msg_diag_success: "Hiçbir hata veya uyarı bulunamadı. Animasyon kusursuz!",
+        msg_diag_warn: "{0} uyarı bulundu. Teşhis paneline göz atın.",
+        lbl_frames_text: "kare"
+    }
+};
+
+let currentLang = 'en';
+
+function t(key, ...args) {
+    let str = translations[currentLang][key] || key;
+    args.forEach((arg, i) => {
+        str = str.replace(`{${i}}`, arg);
+    });
+    return str;
+}
+
+function updateUILanguage() {
+    document.querySelectorAll('[data-i18n]').forEach(el => {
+        const key = el.getAttribute('data-i18n');
+        el.textContent = t(key);
+    });
+    document.querySelectorAll('[data-i18n-title]').forEach(el => {
+        const key = el.getAttribute('data-i18n-title');
+        el.setAttribute('title', t(key));
+    });
+    
+    if (AppState.parts.length > 0) {
+        updateUIStats();
+        renderDiagnostics();
+        
+        UI.partsList.innerHTML = '';
+        AppState.parts.forEach(part => {
+            const li = document.createElement('li');
+            li.innerHTML = `<span><i>📁</i> ${part.path}</span> <span>${part.frames.length} ${t('lbl_frames_text')}</span>`;
+            UI.partsList.appendChild(li);
+        });
+    } else {
+        UI.currentPartText.innerHTML = `<span data-i18n="lbl_part">${t('lbl_part')}</span>: --`;
+        UI.currentFrameText.innerHTML = `<span data-i18n="lbl_frame">${t('lbl_frame')}</span>: 0 / 0`;
+    }
+}
+
+document.getElementById('lang-select').addEventListener('change', (e) => {
+    currentLang = e.target.value;
+    updateUILanguage();
+});
+
+const AppState = {
+    zip: null,
+    meta: { width: 0, height: 0, fps: 0 },
+    parts: [],
+    totalFrames: 0,
+    linearFrames: [],
+    objectUrls: [],
+    warnings: [],
+    resWarningGiven: false,
+    isPlaying: false,
+    currentAbsoluteFrame: 0,
+    currentPartIndex: 0,
+    currentPartFrameIndex: 0,
+    pauseFramesRemaining: 0,
+    lastFrameTime: 0,
+    animationFrameId: null
+};
+
+const UI = {
+    dropZone: document.getElementById('drop-zone'),
+    fileInput: document.getElementById('file-input'),
+    canvas: document.getElementById('preview-canvas'),
+    ctx: document.getElementById('preview-canvas').getContext('2d', { alpha: false }), 
+    phoneFrame: document.getElementById('phone-frame'),
+    loader: document.getElementById('loader'),
+    loaderText: document.getElementById('loader-text'),
+    partsList: document.getElementById('parts-list'),
+    timeline: document.getElementById('timeline'),
+    statRes: document.getElementById('stat-res'),
+    statFps: document.getElementById('stat-fps'),
+    statFrames: document.getElementById('stat-frames'),
+    statSize: document.getElementById('stat-size'),
+    currentPartText: document.getElementById('current-part-text'),
+    currentFrameText: document.getElementById('current-frame-text'),
+    btnPlay: document.getElementById('btn-play'),
+    btnStop: document.getElementById('btn-stop'),
+    btnPrev: document.getElementById('btn-prev'),
+    btnNext: document.getElementById('btn-next'),
+    btnStart: document.getElementById('btn-start'),
+    btnFullscreen: document.getElementById('btn-fullscreen'),
+    iconPlay: document.getElementById('icon-play'),
+    iconPause: document.getElementById('icon-pause'),
+    diagnosticsContainer: document.getElementById('diagnostics-container'),
+    diagnosticsList: document.getElementById('diagnostics-list'),
+    toastContainer: document.getElementById('toast-container')
+};
+
+updateUILanguage();
+
+UI.dropZone.addEventListener('click', () => UI.fileInput.click());
+UI.dropZone.addEventListener('dragover', (e) => { e.preventDefault(); UI.dropZone.classList.add('drag-over'); });
+UI.dropZone.addEventListener('dragleave', () => UI.dropZone.classList.remove('drag-over'));
+UI.dropZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    UI.dropZone.classList.remove('drag-over');
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) handleFileSelect(e.dataTransfer.files[0]);
+});
+
+UI.fileInput.addEventListener('change', (e) => {
+    if (e.target.files.length > 0) handleFileSelect(e.target.files[0]);
+});
+
+UI.btnPlay.addEventListener('click', togglePlay);
+UI.btnStop.addEventListener('click', stopAnimation);
+UI.btnNext.addEventListener('click', () => stepFrame(1));
+UI.btnPrev.addEventListener('click', () => stepFrame(-1));
+UI.btnStart.addEventListener('click', () => jumpToFrame(0));
+UI.timeline.addEventListener('input', (e) => {
+    if(AppState.isPlaying) pauseAnimation(); 
+    jumpToFrame(parseInt(e.target.value, 10));
+});
+UI.btnFullscreen.addEventListener('click', () => UI.phoneFrame.classList.toggle('fullscreen'));
+
+window.addEventListener('keydown', (e) => {
+    if (!AppState.parts.length) return;
+    if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
+    else if (e.code === 'ArrowRight') { e.preventDefault(); stepFrame(1); }
+    else if (e.code === 'ArrowLeft') { e.preventDefault(); stepFrame(-1); }
+});
+
+async function handleFileSelect(file) {
+    if (!file.name.endsWith('.zip')) {
+        showToast(t('err_zip'), 'error');
+        return;
+    }
+
+    resetState();
+    UI.statSize.textContent = (file.size / (1024 * 1024)).toFixed(2) + ' MB';
+    showLoader(t('msg_reading'));
+
+    try {
+        const zip = await JSZip.loadAsync(file);
+        AppState.zip = zip;
+        
+        const descFile = zip.file("desc.txt");
+        if (!descFile) throw new Error(t('err_desc_missing'));
+        
+        const descText = await descFile.async("string");
+        parseDescTxt(descText);
+        await extractAndLoadImages(zip);
+        
+        setupInitialView();
+        renderDiagnostics();
+        showToast(t('msg_success'), 'success');
+        
+    } catch (error) {
+        console.error(error);
+        showToast(error.message, 'error');
+        resetState();
+    } finally {
+        hideLoader();
+    }
+}
+
+function parseDescTxt(text) {
+    if (text.length > 0 && !text.endsWith('\n') && !text.endsWith('\r')) {
+        AppState.warnings.push({ key: 'warn_newline', args: [] });
+    }
+
+    const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
+    if (lines.length < 2) throw new Error(t('err_desc_format'));
+
+    const [width, height, fps] = lines[0].split(/\s+/).map(Number);
+    if (isNaN(width) || isNaN(height) || isNaN(fps)) throw new Error(t('err_desc_invalid'));
+
+    if (fps <= 0 || fps > 60) AppState.warnings.push({ key: 'warn_fps', args: [fps] });
+
+    AppState.meta = { width, height, fps };
+    UI.canvas.width = width;
+    UI.canvas.height = height;
+    
+    UI.phoneFrame.style.aspectRatio = `${width} / ${height}`;
+    UI.phoneFrame.style.maxWidth = width > height ? "800px" : "400px";
+
+    UI.statRes.textContent = `${width} x ${height}`;
+    UI.statFps.textContent = fps;
+
+    AppState.parts = [];
+    for (let i = 1; i < lines.length; i++) {
+        const partsStr = lines[i].split(/\s+/);
+        if (partsStr[0] === 'p' || partsStr[0] === 'c') {
+            AppState.parts.push({
+                type: partsStr[0],
+                count: parseInt(partsStr[1], 10),
+                pause: parseInt(partsStr[2], 10),
+                path: partsStr[3],
+                frames: [],
+                currentRepeat: 0
+            });
+        }
+    }
+}
+
+async function extractAndLoadImages(zip) {
+    let totalFilesFound = 0;
+    UI.partsList.innerHTML = '';
+    const currentZipRef = AppState.zip;
+    
+    for (const part of AppState.parts) {
+        if (AppState.zip !== currentZipRef) return;
+        
+        showLoader(t('msg_extracting', part.path));
+
+        const folderPrefix = `${part.path}/`;
+        const fileEntries = Object.values(zip.files)
+            .filter(f => f.name.startsWith(folderPrefix) && !f.dir && (f.name.endsWith('.png') || f.name.endsWith('.jpg')))
+            .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+
+        if (fileEntries.length === 0) {
+            AppState.warnings.push({ key: 'warn_folder', args: [part.path] });
+            continue;
+        }
+
+        for (const entry of fileEntries) {
+            if (AppState.zip !== currentZipRef) return;
+
+            const blob = await entry.async("blob");
+            const url = URL.createObjectURL(blob);
+            AppState.objectUrls.push(url);
+
+            const img = new Image();
+            img.src = url;
+            await new Promise((resolve) => {
+                img.onload = () => {
+                    if (!AppState.resWarningGiven && (img.width !== AppState.meta.width || img.height !== AppState.meta.height)) {
+                        AppState.warnings.push({ key: 'warn_res', args: [`${img.width}x${img.height}`, `${AppState.meta.width}x${AppState.meta.height}`] });
+                        AppState.resWarningGiven = true;
+                    }
+                    resolve();
+                };
+                img.onerror = resolve;
+            });
+            
+            part.frames.push(img);
+        }
+
+        totalFilesFound += part.frames.length;
+        
+        const li = document.createElement('li');
+        li.innerHTML = `<span><i>📁</i> ${part.path}</span> <span>${part.frames.length} ${t('lbl_frames_text')}</span>`;
+        UI.partsList.appendChild(li);
+    }
+
+    if (totalFilesFound === 0) throw new Error(t('err_no_frames'));
+    
+    buildLinearTimeline();
+    AppState.totalFrames = totalFilesFound;
+    UI.statFrames.textContent = totalFilesFound;
+}
+
+function buildLinearTimeline() {
+    AppState.linearFrames = [];
+    AppState.parts.forEach((part, pIdx) => {
+        const loops = part.count === 0 ? 1 : part.count; 
+        for (let loop = 0; loop < loops; loop++) {
+            part.frames.forEach((_, fIdx) => {
+                AppState.linearFrames.push({ pIdx, fIdx, isPause: false });
+            });
+            for(let p = 0; p < part.pause; p++) {
+                 AppState.linearFrames.push({ pIdx, fIdx: part.frames.length - 1, isPause: true });
+            }
+        }
+    });
+    UI.timeline.max = AppState.linearFrames.length - 1;
+    UI.timeline.value = 0;
+}
+
+function setupInitialView() {
+    enableControls(true);
+    jumpToFrame(0);
+    renderCurrentFrame();
+}
+
+function enableControls(enable) {
+    [UI.btnPlay, UI.btnStop, UI.btnPrev, UI.btnNext, UI.btnStart, UI.timeline].forEach(b => b.disabled = !enable);
+}
+
+function togglePlay() {
+    AppState.isPlaying ? pauseAnimation() : playAnimation();
+}
+
+function playAnimation() {
+    if (AppState.linearFrames.length === 0) return;
+    AppState.isPlaying = true;
+    UI.iconPlay.classList.add('hidden');
+    UI.iconPause.classList.remove('hidden');
+    AppState.lastFrameTime = performance.now();
+    AppState.animationFrameId = requestAnimationFrame(gameLoop);
+}
+
+function pauseAnimation() {
+    AppState.isPlaying = false;
+    UI.iconPlay.classList.remove('hidden');
+    UI.iconPause.classList.add('hidden');
+    if (AppState.animationFrameId) cancelAnimationFrame(AppState.animationFrameId);
+}
+
+function stopAnimation() {
+    pauseAnimation();
+    jumpToFrame(0);
+}
+
+function gameLoop(timestamp) {
+    if (!AppState.isPlaying) return;
+    const frameDuration = 1000 / AppState.meta.fps;
+    const elapsed = timestamp - AppState.lastFrameTime;
+
+    if (elapsed >= frameDuration) {
+        advanceLogic();
+        renderCurrentFrame();
+        AppState.lastFrameTime = timestamp - (elapsed % frameDuration);
+    }
+    if (AppState.isPlaying) AppState.animationFrameId = requestAnimationFrame(gameLoop);
+}
+
+function advanceLogic() {
+    const part = AppState.parts[AppState.currentPartIndex];
+    if (AppState.pauseFramesRemaining > 0) {
+        AppState.pauseFramesRemaining--;
+        updateUIStats();
+        advanceAbsoluteTimeline();
+        if (AppState.pauseFramesRemaining === 0) evaluatePartTransition(part);
+        return;
+    }
+
+    AppState.currentPartFrameIndex++;
+    advanceAbsoluteTimeline();
+
+    if (AppState.currentPartFrameIndex >= part.frames.length) {
+        AppState.currentPartFrameIndex = part.frames.length - 1;
+        if (part.pause > 0) AppState.pauseFramesRemaining = part.pause; else evaluatePartTransition(part);
+    }
+}
+
+function evaluatePartTransition(part) {
+    part.currentRepeat++;
+    if (part.count === 0 || part.currentRepeat < part.count) {
+        AppState.currentPartFrameIndex = 0;
+    } else {
+        part.currentRepeat = 0;
+        AppState.currentPartIndex++;
+        if (AppState.currentPartIndex >= AppState.parts.length) {
+            stopAnimation();
+            return;
+        }
+        AppState.currentPartFrameIndex = 0;
+    }
+}
+
+function advanceAbsoluteTimeline() {
+    AppState.currentAbsoluteFrame++;
+    if (AppState.currentAbsoluteFrame >= AppState.linearFrames.length) {
+        AppState.currentAbsoluteFrame = AppState.parts[AppState.parts.length - 1].count === 0 
+            ? AppState.linearFrames.length - 1 
+            : 0;
+    }
+}
+
+function renderCurrentFrame() {
+    const part = AppState.parts[AppState.currentPartIndex];
+    if (!part || !part.frames[AppState.currentPartFrameIndex]) return;
+    UI.ctx.clearRect(0, 0, UI.canvas.width, UI.canvas.height);
+    UI.ctx.drawImage(part.frames[AppState.currentPartFrameIndex], 0, 0, UI.canvas.width, UI.canvas.height);
+    updateUIStats();
+}
+
+function updateUIStats() {
+    UI.timeline.value = AppState.currentAbsoluteFrame;
+    const part = AppState.parts[AppState.currentPartIndex];
+    
+    UI.currentPartText.innerHTML = `<span data-i18n="lbl_part">${t('lbl_part')}</span>: ${part.path}`;
+    UI.currentFrameText.innerHTML = `<span data-i18n="lbl_frame">${t('lbl_frame')}</span>: ${AppState.currentPartFrameIndex + 1} / ${part.frames.length}`;
+}
+
+function stepFrame(dir) {
+    let target = AppState.currentAbsoluteFrame + dir;
+    if (target < 0) target = 0;
+    if (target >= AppState.linearFrames.length) target = AppState.linearFrames.length - 1;
+    jumpToFrame(target);
+}
+
+function jumpToFrame(absoluteIndex) {
+    if (AppState.linearFrames.length === 0 || absoluteIndex >= AppState.linearFrames.length) return;
+    const targetState = AppState.linearFrames[absoluteIndex];
+    AppState.currentAbsoluteFrame = absoluteIndex;
+    AppState.currentPartIndex = targetState.pIdx;
+    AppState.currentPartFrameIndex = targetState.fIdx;
+    AppState.pauseFramesRemaining = targetState.isPause ? 1 : 0;
+    AppState.parts.forEach(p => p.currentRepeat = 0);
+    renderCurrentFrame();
+}
+
+function resetState() {
+    pauseAnimation();
+    AppState.objectUrls.forEach(url => URL.revokeObjectURL(url));
+    AppState.zip = null;
+    AppState.parts = [];
+    AppState.linearFrames = [];
+    AppState.objectUrls = [];
+    AppState.warnings = [];
+    AppState.resWarningGiven = false;
+    AppState.totalFrames = 0;
+    AppState.currentPartIndex = 0;
+    AppState.currentPartFrameIndex = 0;
+    AppState.currentAbsoluteFrame = 0;
+    
+    UI.fileInput.value = '';
+    UI.ctx.clearRect(0, 0, UI.canvas.width, UI.canvas.height);
+    
+    const defaultLi = document.createElement('li');
+    defaultLi.style.color = 'var(--text-muted)';
+    defaultLi.setAttribute('data-i18n', 'awaiting_upload');
+    defaultLi.textContent = t('awaiting_upload');
+    UI.partsList.innerHTML = '';
+    UI.partsList.appendChild(defaultLi);
+    
+    UI.statRes.textContent = '-- x --';
+    UI.statFps.textContent = '--';
+    UI.statFrames.textContent = '0';
+    UI.currentPartText.innerHTML = `<span data-i18n="lbl_part">${t('lbl_part')}</span>: --`;
+    UI.currentFrameText.innerHTML = `<span data-i18n="lbl_frame">${t('lbl_frame')}</span>: 0 / 0`;
+    UI.timeline.value = 0;
+    
+    UI.diagnosticsContainer.classList.add('hidden');
+    UI.diagnosticsList.innerHTML = '';
+    
+    enableControls(false);
+}
+
+function renderDiagnostics() {
+    UI.diagnosticsList.innerHTML = '';
+    UI.diagnosticsContainer.classList.remove('hidden');
+
+    if (AppState.warnings.length === 0) {
+        const li = document.createElement('li');
+        li.className = 'diag-success';
+        li.textContent = t('msg_diag_success');
+        UI.diagnosticsList.appendChild(li);
+    } else {
+        AppState.warnings.forEach(warning => {
+            const li = document.createElement('li');
+            li.className = 'diag-warning';
+            li.textContent = t(warning.key, ...warning.args);
+            UI.diagnosticsList.appendChild(li);
+        });
+        showToast(t('msg_diag_warn', AppState.warnings.length), 'warning');
+    }
+}
+
+function showLoader(text) { UI.loaderText.textContent = text; UI.loader.classList.add('active'); }
+function hideLoader() { UI.loader.classList.remove('active'); }
+
+function showToast(message, type = 'success') {
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.textContent = message;
+    UI.toastContainer.appendChild(toast);
+    setTimeout(() => {
+        toast.style.animation = 'slideOut 0.3s forwards';
+        setTimeout(() => toast.remove(), 300);
+    }, 4000);
+}
+</script>
+</body>
+</html>

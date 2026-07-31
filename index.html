@@ -482,6 +482,10 @@ const translations = {
 
 let currentLang = 'en';
 
+// Sonsuz döngülü (count: 0) bölümler önizlemede kaç kez tekrarlansın?
+// Bundan sonra varsa sıradaki bölüme (örn. tek seferlik bitiş animasyonu) geçilir.
+const LOOP_PREVIEW_REPEATS = 10;
+
 function t(key, ...args) {
     let str = translations[currentLang][key] || key;
     args.forEach((arg, i) => {
@@ -734,7 +738,10 @@ async function extractAndLoadImages(zip) {
 function buildLinearTimeline() {
     AppState.linearFrames = [];
     AppState.parts.forEach((part, pIdx) => {
-        const loops = part.count === 0 ? 1 : part.count; 
+        // count === 0 -> gerçek Android'de sonsuz döngü demek. Önizlemede
+        // sonsuz döngü yapmak yerine LOOP_PREVIEW_REPEATS kadar tekrarlayıp
+        // sıradaki bölüme geçiyoruz (varsa tek seferlik bitiş animasyonu).
+        const loops = part.count === 0 ? LOOP_PREVIEW_REPEATS : part.count;
         for (let loop = 0; loop < loops; loop++) {
             part.frames.forEach((_, fIdx) => {
                 AppState.linearFrames.push({ pIdx, fIdx, isPause: false });
@@ -817,7 +824,10 @@ function advanceLogic() {
 
 function evaluatePartTransition(part) {
     part.currentRepeat++;
-    if (part.count === 0 || part.currentRepeat < part.count) {
+    // count === 0 (sonsuz döngü) olan bölümler artık LOOP_PREVIEW_REPEATS
+    // kadar tekrarlanıp, süre dolunca normal bir bölüm gibi bir sonrakine geçiyor.
+    const effectiveCount = part.count === 0 ? LOOP_PREVIEW_REPEATS : part.count;
+    if (part.currentRepeat < effectiveCount) {
         AppState.currentPartFrameIndex = 0;
     } else {
         part.currentRepeat = 0;
@@ -832,10 +842,12 @@ function evaluatePartTransition(part) {
 
 function advanceAbsoluteTimeline() {
     AppState.currentAbsoluteFrame++;
+    // linearFrames artık sonsuz döngüler için de LOOP_PREVIEW_REPEATS kadar
+    // gerçek kare içeriyor, bu yüzden ekstra "sonsuz döngüde geri sar" özel
+    // durumuna gerek kalmadı - basitçe son kareye sabitle (pratikte evaluatePartTransition
+    // zaten aynı anda stopAnimation() ile 0'a resetleyecektir).
     if (AppState.currentAbsoluteFrame >= AppState.linearFrames.length) {
-        AppState.currentAbsoluteFrame = AppState.parts[AppState.parts.length - 1].count === 0 
-            ? AppState.linearFrames.length - 1 
-            : 0;
+        AppState.currentAbsoluteFrame = AppState.linearFrames.length - 1;
     }
 }
 
